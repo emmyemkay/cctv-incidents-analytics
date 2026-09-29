@@ -1,0 +1,333 @@
+name: cctv-incident-intelligence-dev
+
+x-app-environment: &app-environment
+  DJANGO_SETTINGS_MODULE: ${DJANGO_SETTINGS_MODULE:-cctv_analytics.settings.development}
+  DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:-development-only-change-me}
+  DJANGO_DEBUG: ${DJANGO_DEBUG:-1}
+  DJANGO_ALLOWED_HOSTS: ${DJANGO_ALLOWED_HOSTS:-localhost,127.0.0.1,0.0.0.0,web,nginx}
+  CSRF_TRUSTED_ORIGINS: ${CSRF_TRUSTED_ORIGINS:-http://localhost:8001,http://127.0.0.1:8001,http://localhost:8080,http://127.0.0.1:8080}
+  DJANGO_TIME_ZONE: ${DJANGO_TIME_ZONE:-Africa/Kampala}
+  DEPLOYMENT_ENVIRONMENT: ${DEPLOYMENT_ENVIRONMENT:-development}
+  PLATFORM_VERSION: ${PLATFORM_VERSION:-3.1.0-dev}
+  INGEST_API_TOKEN: ${INGEST_API_TOKEN:-change-me-ingest-token}
+  USE_POSTGRES: "1"
+  POSTGRES_DB: ${POSTGRES_DB:-cctv_analytics}
+  POSTGRES_USER: ${POSTGRES_USER:-cctv}
+  POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-cctv}
+  POSTGRES_HOST: db
+  POSTGRES_PORT: 5432
+  POSTGRES_SSLMODE: ${POSTGRES_SSLMODE:-prefer}
+  USE_REDIS: "1"
+  REDIS_URL: redis://redis:6379/0
+  CHANNEL_REDIS_URL: redis://redis:6379/0
+  CELERY_BROKER_URL: redis://redis:6379/1
+  CACHE_REDIS_URL: redis://redis:6379/2
+  ASYNC_DATASET_IMPORTS: ${ASYNC_DATASET_IMPORTS:-1}
+  AUTO_IMPORT_DATASETS: ${AUTO_IMPORT_DATASETS:-1}
+  ANALYTICS_CACHE_TTL: ${ANALYTICS_CACHE_TTL:-300}
+  JSON_LOGS: ${JSON_LOGS:-0}
+  LOG_LEVEL: ${LOG_LEVEL:-INFO}
+  ENABLE_DEBUG_TOOLBAR: ${ENABLE_DEBUG_TOOLBAR:-1}
+  USE_MAILPIT: ${USE_MAILPIT:-0}
+  EMAIL_HOST: ${EMAIL_HOST:-mailpit}
+  EMAIL_PORT: ${EMAIL_PORT:-1025}
+  USE_S3_STORAGE: ${USE_S3_STORAGE:-0}
+  AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-minioadmin}
+  AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-minioadmin123}
+  AWS_STORAGE_BUCKET_NAME: ${AWS_STORAGE_BUCKET_NAME:-incident-platform}
+  AWS_S3_ENDPOINT_URL: ${AWS_S3_ENDPOINT_URL:-http://minio:9000}
+  AWS_S3_REGION_NAME: ${AWS_S3_REGION_NAME:-us-east-1}
+  AWS_S3_ADDRESSING_STYLE: ${AWS_S3_ADDRESSING_STYLE:-path}
+
+x-dev-app: &dev-app
+  build:
+    context: .
+    target: development
+  image: cctv-incident-intelligence:development
+  environment: *app-environment
+  volumes:
+    - .:/app
+    - media_data:/app/media
+    - static_data:/app/staticfiles
+    - dev_cache:/home/app/.cache
+  depends_on:
+    db:
+      condition: service_healthy
+    redis:
+      condition: service_healthy
+  restart: unless-stopped
+
+services:
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-cctv_analytics}
+      POSTGRES_USER: ${POSTGRES_USER:-cctv}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-cctv}
+    ports:
+      - "${POSTGRES_DEV_PORT:-5433}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-cctv} -d ${POSTGRES_DB:-cctv_analytics}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+
+  redis:
+    image: redis:7.4-alpine
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory", "256mb", "--maxmemory-policy", "allkeys-lru"]
+    ports:
+      - "${REDIS_DEV_PORT:-6380}:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
+  web:
+    <<: *dev-app
+    command: ["sh", "/app/scripts/dev-web.sh"]
+    ports:
+      - "${WEB_PORT:-8001}:8000"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8000/health/ready/"]
+      interval: 15s
+      timeout: 5s
+      retries: 20
+      start_period: 45s
+
+  worker:
+    <<: *dev-app
+    command: ["sh", "/app/scripts/dev-worker.sh"]
+    environment:
+      <<: *app-environment
+      CELERY_DEV_QUEUES: ${CELERY_DEV_QUEUES:-imports,analytics,default,celery}
+      CELERY_DEV_CONCURRENCY: ${CELERY_DEV_CONCURRENCY:-2}
+    depends_on:
+      web:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "celery -A cctv_analytics inspect ping -d celery@$$HOSTNAME --timeout=5 | grep -q pong"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 45s
+
+  nginx:
+    image: nginx:1.27-alpine
+    profiles: ["edge"]
+    ports:
+      - "${NGINX_PORT:-8080}:80"
+    volumes:
+      - ./deploy/nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+      - static_data:/srv/static:ro
+      - media_data:/srv/media:ro
+    depends_on:
+      web:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "-", "http://127.0.0.1/health/live/"]
+      interval: 20s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  beat:
+    <<: *dev-app
+    profiles: ["scheduled"]
+    command: ["sh", "/app/scripts/dev-beat.sh"]
+    depends_on:
+      web:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  worker-imports:
+    <<: *dev-app
+    profiles: ["workers"]
+    command: ["sh", "/app/scripts/dev-dedicated-worker.sh"]
+    environment:
+      <<: *app-environment
+      CELERY_WORKER_NAME: imports
+      CELERY_WORKER_QUEUES: imports
+      CELERY_WORKER_CONCURRENCY: ${CELERY_IMPORT_CONCURRENCY:-1}
+    depends_on:
+      web:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  worker-analytics:
+    <<: *dev-app
+    profiles: ["workers"]
+    command: ["sh", "/app/scripts/dev-dedicated-worker.sh"]
+    environment:
+      <<: *app-environment
+      CELERY_WORKER_NAME: analytics
+      CELERY_WORKER_QUEUES: analytics,default,celery
+      CELERY_WORKER_CONCURRENCY: ${CELERY_ANALYTICS_CONCURRENCY:-2}
+    depends_on:
+      web:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  minio:
+    image: minio/minio:latest
+    profiles: ["storage"]
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin123}
+    ports:
+      - "${MINIO_API_PORT:-9000}:9000"
+      - "${MINIO_CONSOLE_PORT:-9001}:9001"
+    volumes:
+      - minio_data:/data
+    restart: unless-stopped
+
+  minio-init:
+    image: minio/mc:latest
+    profiles: ["storage"]
+    depends_on:
+      - minio
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin123}
+      AWS_STORAGE_BUCKET_NAME: ${AWS_STORAGE_BUCKET_NAME:-incident-platform}
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        until mc alias set local http://minio:9000 "$${MINIO_ROOT_USER}" "$${MINIO_ROOT_PASSWORD}"; do sleep 2; done
+        mc mb --ignore-existing "local/$${AWS_STORAGE_BUCKET_NAME}"
+        mc anonymous set none "local/$${AWS_STORAGE_BUCKET_NAME}"
+    restart: "no"
+
+  mailpit:
+    image: axllent/mailpit:v1.21
+    profiles: ["mail"]
+    ports:
+      - "${MAILPIT_SMTP_PORT:-1025}:1025"
+      - "${MAILPIT_UI_PORT:-8025}:8025"
+    restart: unless-stopped
+
+  adminer:
+    image: adminer:4.8.1-standalone
+    profiles: ["db-tools"]
+    environment:
+      ADMINER_DEFAULT_SERVER: db
+    ports:
+      - "${ADMINER_PORT:-8081}:8080"
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
+  flower:
+    <<: *dev-app
+    profiles: ["monitoring"]
+    command:
+      - celery
+      - -A
+      - cctv_analytics
+      - flower
+      - --address=0.0.0.0
+      - --port=5555
+      - --broker=${CELERY_BROKER_URL:-redis://redis:6379/1}
+    ports:
+      - "${FLOWER_PORT:-5555}:5555"
+    depends_on:
+      redis:
+        condition: service_healthy
+
+  postgres-exporter:
+    image: prometheuscommunity/postgres-exporter:v0.16.0
+    profiles: ["monitoring"]
+    environment:
+      DATA_SOURCE_NAME: postgresql://${POSTGRES_USER:-cctv}:${POSTGRES_PASSWORD:-cctv}@db:5432/${POSTGRES_DB:-cctv_analytics}?sslmode=disable
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
+  redis-exporter:
+    image: oliver006/redis_exporter:v1.67.0
+    profiles: ["monitoring"]
+    environment:
+      REDIS_ADDR: redis://redis:6379
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  prometheus:
+    image: prom/prometheus:v2.55.1
+    profiles: ["monitoring"]
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --web.enable-lifecycle
+    ports:
+      - "${PROMETHEUS_PORT:-9090}:9090"
+    volumes:
+      - ./deploy/monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    depends_on:
+      web:
+        condition: service_healthy
+      postgres-exporter:
+        condition: service_started
+      redis-exporter:
+        condition: service_started
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:11.4.0
+    profiles: ["monitoring"]
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin123}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    ports:
+      - "${GRAFANA_PORT:-3000}:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./deploy/monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./deploy/monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    depends_on:
+      - prometheus
+    restart: unless-stopped
+
+  backup:
+    image: postgres:17-alpine
+    profiles: ["ops"]
+    environment:
+      PGPASSWORD: ${POSTGRES_PASSWORD:-cctv}
+    volumes:
+      - ./backups:/backups
+    depends_on:
+      db:
+        condition: service_healthy
+    command:
+      - /bin/sh
+      - -c
+      - pg_dump -h db -U ${POSTGRES_USER:-cctv} -d ${POSTGRES_DB:-cctv_analytics} -Fc -f /backups/cctv_analytics_$$(date +%Y%m%d_%H%M%S).dump
+    restart: "no"
+
+volumes:
+  postgres_data:
+  redis_data:
+  media_data:
+  static_data:
+  dev_cache:
+  minio_data:
+  prometheus_data:
+  grafana_data:

@@ -1,0 +1,152 @@
+name: cctv-incident-intelligence-production
+
+x-production-environment: &production-environment
+  DJANGO_SETTINGS_MODULE: cctv_analytics.settings.production
+  DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:?DJANGO_SECRET_KEY is required}
+  DJANGO_DEBUG: "0"
+  DJANGO_ALLOWED_HOSTS: ${DJANGO_ALLOWED_HOSTS:?DJANGO_ALLOWED_HOSTS is required}
+  CSRF_TRUSTED_ORIGINS: ${CSRF_TRUSTED_ORIGINS:?CSRF_TRUSTED_ORIGINS is required}
+  DJANGO_TIME_ZONE: ${DJANGO_TIME_ZONE:-Africa/Kampala}
+  DEPLOYMENT_ENVIRONMENT: production
+  PLATFORM_VERSION: ${PLATFORM_VERSION:-3.1.0}
+  INGEST_API_TOKEN: ${INGEST_API_TOKEN:?INGEST_API_TOKEN is required}
+  USE_POSTGRES: "1"
+  POSTGRES_DB: ${POSTGRES_DB:-cctv_analytics}
+  POSTGRES_USER: ${POSTGRES_USER:-cctv}
+  POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+  POSTGRES_HOST: db
+  POSTGRES_PORT: 5432
+  POSTGRES_SSLMODE: ${POSTGRES_SSLMODE:-prefer}
+  USE_REDIS: "1"
+  REDIS_URL: redis://redis:6379/0
+  CHANNEL_REDIS_URL: redis://redis:6379/0
+  CELERY_BROKER_URL: redis://redis:6379/1
+  CACHE_REDIS_URL: redis://redis:6379/2
+  ASYNC_DATASET_IMPORTS: "1"
+  AUTO_IMPORT_DATASETS: "0"
+  JSON_LOGS: "1"
+  LOG_LEVEL: ${LOG_LEVEL:-INFO}
+  USE_S3_STORAGE: ${USE_S3_STORAGE:-0}
+  AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
+  AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
+  AWS_STORAGE_BUCKET_NAME: ${AWS_STORAGE_BUCKET_NAME:-}
+  AWS_S3_ENDPOINT_URL: ${AWS_S3_ENDPOINT_URL:-}
+  AWS_S3_REGION_NAME: ${AWS_S3_REGION_NAME:-us-east-1}
+  AWS_S3_ADDRESSING_STYLE: ${AWS_S3_ADDRESSING_STYLE:-path}
+
+x-production-app: &production-app
+  build:
+    context: .
+    target: runtime
+  image: cctv-incident-intelligence:${PLATFORM_VERSION:-3.1.0}
+  environment: *production-environment
+  volumes:
+    - media_data:/app/media
+    - static_data:/app/staticfiles
+  depends_on:
+    db:
+      condition: service_healthy
+    redis:
+      condition: service_healthy
+  restart: unless-stopped
+
+services:
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-cctv_analytics}
+      POSTGRES_USER: ${POSTGRES_USER:-cctv}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-cctv} -d ${POSTGRES_DB:-cctv_analytics}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+
+  redis:
+    image: redis:7.4-alpine
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory-policy", "allkeys-lru"]
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
+  migrate:
+    <<: *production-app
+    command: ["sh", "/app/scripts/initialize.sh"]
+    restart: "no"
+
+  web:
+    <<: *production-app
+    command: ["daphne", "-b", "0.0.0.0", "-p", "8000", "cctv_analytics.asgi:application"]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8000/health/ready/"]
+      interval: 20s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  worker-imports:
+    <<: *production-app
+    command: ["celery", "-A", "cctv_analytics", "worker", "-n", "imports@%h", "-Q", "imports", "--loglevel=INFO", "--concurrency=${CELERY_IMPORT_CONCURRENCY:-1}"]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+
+  worker-analytics:
+    <<: *production-app
+    command: ["celery", "-A", "cctv_analytics", "worker", "-n", "analytics@%h", "-Q", "analytics,default,celery", "--loglevel=INFO", "--concurrency=${CELERY_ANALYTICS_CONCURRENCY:-2}"]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+
+  beat:
+    <<: *production-app
+    command: ["celery", "-A", "cctv_analytics", "beat", "--loglevel=INFO", "--scheduler", "django_celery_beat.schedulers:DatabaseScheduler"]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+
+  nginx:
+    image: nginx:1.27-alpine
+    ports:
+      - "${WEB_PORT:-8001}:80"
+    volumes:
+      - ./deploy/nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+      - static_data:/srv/static:ro
+      - media_data:/srv/media:ro
+    depends_on:
+      web:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "-", "http://127.0.0.1/health/live/"]
+      interval: 20s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  redis_data:
+  media_data:
+  static_data:

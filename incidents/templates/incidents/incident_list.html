@@ -1,0 +1,24 @@
+{% extends 'incidents/base.html' %}
+{% block title %}Incident Register · Incident Intelligence{% endblock %}
+{% block page_title %}Incident Register{% endblock %}
+{% block content %}
+<div class="page-heading">
+  <div><h1>Incident Register</h1><p>Search, filter, drill into station/category profiles and export normalized incident records.</p></div>
+  <div class="report-actions">
+    <a href="{% url 'incidents:export_csv' %}?{{ request.GET.urlencode }}" class="btn btn-sm btn-outline-secondary"><i class="fa-solid fa-file-csv me-1"></i>CSV</a>
+    <a href="{% url 'incidents:export_xlsx' %}?{{ request.GET.urlencode }}" class="btn btn-sm btn-outline-secondary"><i class="fa-solid fa-file-excel me-1"></i>Excel</a>
+    <a href="{% url 'incidents:upload' %}" class="btn btn-sm btn-primary"><i class="fa-solid fa-cloud-arrow-up me-1"></i>Upload dataset</a>
+  </div>
+</div>
+{% include 'incidents/partials/analytics_filters.html' %}
+<div class="card">
+  <div class="card-header d-flex justify-content-between align-items-center"><div><strong>Filtered incidents</strong><div class="chart-subtitle">{{ page_obj.paginator.count }} matching records</div></div><span class="badge text-bg-light border">50 per page</span></div>
+  <div class="table-responsive">
+    <table class="table table-hover align-middle mb-0">
+      <thead><tr><th>Date</th><th>Source</th><th>Origin</th><th>Event ID</th><th>Category</th><th>Location</th><th>Area / station</th><th>Status</th><th>Coordinates</th></tr></thead>
+      <tbody>{% for incident in page_obj %}<tr><td class="text-nowrap">{{ incident.reported_at|date:'d M Y H:i' }}</td><td><span class="source-badge source-{{ incident.source_type|lower }}">{{ incident.source_type }}</span></td><td><span class="badge text-bg-light border">{{ incident.get_origin_display }}</span></td><td>{{ incident.event_id }}</td><td>{% if incident.analytical_category %}<a href="{% url 'incidents:category_profile' incident.analytical_category %}">{{ incident.analytical_category }}</a>{% else %}—{% endif %}</td><td>{{ incident.incident_location|truncatechars:50|default:'—' }}</td><td>{% if incident.police_station %}<a href="{% url 'incidents:station_profile' incident.police_station %}">{{ incident.police_station }}</a>{% else %}—{% endif %}</td><td>{{ incident.event_status|default:'—' }}</td><td>{% if incident.has_coordinates %}{{ incident.latitude|floatformat:5 }}, {{ incident.longitude|floatformat:5 }}{% else %}—{% endif %}</td></tr>{% empty %}<tr><td colspan="9" class="empty-state">No matching incidents.</td></tr>{% endfor %}</tbody>
+    </table>
+  </div>
+</div>
+{% if page_obj.paginator.num_pages > 1 %}<nav class="mt-4"><ul class="pagination justify-content-center">{% if page_obj.has_previous %}<li class="page-item"><a class="page-link" href="?{{ query_string }}{% if query_string %}&{% endif %}page={{ page_obj.previous_page_number }}">Previous</a></li>{% endif %}<li class="page-item disabled"><span class="page-link">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span></li>{% if page_obj.has_next %}<li class="page-item"><a class="page-link" href="?{{ query_string }}{% if query_string %}&{% endif %}page={{ page_obj.next_page_number }}">Next</a></li>{% endif %}</ul></nav>{% endif %}
+{% endblock %}

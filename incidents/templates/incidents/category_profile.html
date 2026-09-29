@@ -1,0 +1,32 @@
+{% extends 'incidents/base.html' %}
+{% load static %}
+{% block title %}{{ payload.category }} · Category Intelligence{% endblock %}
+{% block page_title %}Category Intelligence Profile{% endblock %}
+{% block content %}
+<div class="card profile-hero mb-4"><div class="card-body"><div class="row align-items-center g-3"><div class="col-xl-8"><div class="small text-uppercase fw-bold opacity-75">Incident category</div><h1 class="h2 fw-bold mb-2">{{ payload.category }}</h1><p class="mb-0 opacity-75">Trend, station concentration, sub-categories, status, time pattern, recurring locations and coordinate hotspots.</p></div><div class="col-xl-4 text-xl-end"><a class="btn btn-light" href="{% url 'incidents:incident_list' %}?category={{ payload.category|urlencode }}"><i class="fa-solid fa-table-list me-1"></i>Open incident register</a></div></div></div></div>
+{% include 'incidents/partials/analytics_filters.html' %}
+<div class="row g-3 mb-4">
+  <div class="col-sm-6 col-xl-3"><div class="card metric-card"><div class="card-body"><div class="metric-label">Total incidents</div><div class="metric-value">{{ payload.kpis.total }}</div><div class="metric-foot">Current category selection</div></div></div></div>
+  <div class="col-sm-6 col-xl-3"><div class="card metric-card metric-green"><div class="card-body"><div class="metric-label">Map readiness</div><div class="metric-value">{{ payload.kpis.mapped_pct }}%</div><div class="metric-foot">{{ payload.kpis.mapped }} valid coordinates</div></div></div></div>
+  <div class="col-sm-6 col-xl-3"><div class="card metric-card metric-purple"><div class="card-body"><div class="metric-label">Stations</div><div class="metric-value">{{ payload.kpis.stations }}</div><div class="metric-foot">Distinct operational areas</div></div></div></div>
+  <div class="col-sm-6 col-xl-3"><div class="card metric-card metric-orange"><div class="card-body"><div class="metric-label">Sub-categories</div><div class="metric-value">{{ payload.kpis.sub_categories }}</div><div class="metric-foot">Distinct recorded sub-types</div></div></div></div>
+</div>
+<div class="row g-4 mb-4">
+  <div class="col-xl-8"><div class="card h-100"><div class="card-header"><strong>Monthly category trend</strong></div><div class="card-body chart-body chart-body-lg"><canvas id="categoryProfileTrendChart"></canvas></div></div></div>
+  <div class="col-xl-4"><div class="card h-100"><div class="card-header"><strong>Status distribution</strong></div><div class="card-body chart-body"><canvas id="stationStatusChart"></canvas></div></div></div>
+</div>
+<div class="row g-4 mb-4">
+  <div class="col-xl-6"><div class="card h-100"><div class="card-header"><strong>Leading stations</strong></div><div class="card-body chart-body chart-body-xl"><canvas id="categoryStationChart"></canvas></div></div></div>
+  <div class="col-xl-6"><div class="card h-100"><div class="card-header"><strong>Sub-category composition</strong></div><div class="card-body chart-body chart-body-xl"><canvas id="categorySubcategoryChart"></canvas></div></div></div>
+</div>
+<div class="row g-4 mb-4">
+  <div class="col-xl-5"><div class="card h-100"><div class="card-header"><strong>Hourly pattern</strong></div><div class="card-body chart-body chart-body-lg"><canvas id="hourChart"></canvas></div></div></div>
+  <div class="col-xl-7"><div class="card h-100"><div class="card-header"><strong>Mapped category hotspots</strong><div class="chart-subtitle">All valid coordinates for this exact Category use the same stable Category-name colour, with a density heatmap and administrator decision snapshot.</div></div><div class="card-body p-0"><div id="incidentMap" data-map-url="{% url 'incidents:api_map_points' %}?category={{ profile_name|urlencode }}&{{ request.GET.urlencode }}&limit=50000"></div></div></div></div>
+</div>
+<div class="row g-4">
+  <div class="col-xl-5"><div class="card h-100"><div class="card-header"><strong>Repeated locations</strong></div><div class="table-responsive"><table class="table mb-0"><thead><tr><th>Location</th><th class="text-end">Count</th></tr></thead><tbody>{% for row in payload.locations %}<tr><td>{{ row.incident_location|default:'—'|truncatechars:60 }}</td><td class="text-end fw-bold">{{ row.total }}</td></tr>{% empty %}<tr><td colspan="2" class="empty-state">No location data.</td></tr>{% endfor %}</tbody></table></div></div></div>
+  <div class="col-xl-7"><div class="card h-100"><div class="card-header"><strong>Latest category incidents</strong></div><div class="table-responsive"><table class="table mb-0"><thead><tr><th>Reported</th><th>Event ID</th><th>Station</th><th>Status</th></tr></thead><tbody>{% for row in payload.recent %}<tr><td class="text-nowrap">{{ row.reported_at|date:'d M Y H:i' }}</td><td>{{ row.event_id }}</td><td>{% if row.police_station %}<a href="{% url 'incidents:station_profile' row.police_station %}">{{ row.police_station }}</a>{% else %}—{% endif %}</td><td>{{ row.event_status|default:'—' }}</td></tr>{% empty %}<tr><td colspan="4" class="empty-state">No incidents.</td></tr>{% endfor %}</tbody></table></div></div></div>
+</div>
+{{ payload|json_script:'analytics-data' }}
+{% endblock %}
+{% block scripts %}<script src="{% static 'incidents/js/analytics.js' %}?v=gis-map-report-2"></script>{% endblock %}

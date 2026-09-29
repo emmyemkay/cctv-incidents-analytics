@@ -1,0 +1,41 @@
+{% extends 'incidents/base.html' %}
+{% load static %}
+{% block title %}Data Quality · Incident Intelligence{% endblock %}
+{% block page_title %}Data Quality and Trust Monitoring{% endblock %}
+{% block content %}
+<div class="page-heading"><div><h1>Data Quality Monitoring</h1><p>Measure completeness, coordinate validity, duplicate identifiers, spelling variants and import reliability.</p></div><a class="btn btn-sm btn-outline-secondary" href="{% url 'incidents:upload' %}"><i class="fa-solid fa-cloud-arrow-up me-1"></i>Import history</a></div>
+{% include 'incidents/partials/analytics_filters.html' %}
+
+<div class="row g-3 mb-4">
+  <div class="col-sm-6 col-xl-3"><div class="card metric-card metric-green h-100"><div class="card-body"><div class="metric-label">Valid coordinates</div><div class="metric-value">{{ payload.coordinate.valid }}</div><div class="metric-foot">Within expected Uganda boundary</div></div></div></div>
+  <div class="col-sm-6 col-xl-3"><div class="card metric-card metric-red h-100"><div class="card-body"><div class="metric-label">Missing coordinates</div><div class="metric-value">{{ payload.metrics.missing_coordinates }}</div><div class="metric-foot">{{ payload.metrics.missing_coordinates_pct }}% of records</div></div></div></div>
+  <div class="col-sm-6 col-xl-3"><div class="card metric-card metric-orange h-100"><div class="card-body"><div class="metric-label">Sub-category fallback</div><div class="metric-value">{{ payload.metrics.subcategory_used_as_category }}</div><div class="metric-foot">Used only where Category is blank</div></div></div></div>
+  <div class="col-sm-6 col-xl-3"><div class="card metric-card metric-purple h-100"><div class="card-body"><div class="metric-label">Uncategorised</div><div class="metric-value">{{ payload.metrics.missing_both_category_fields }}</div><div class="metric-foot">Both Category and Sub-Category blank</div></div></div></div>
+</div>
+
+<div class="row g-4 mb-4">
+  <div class="col-xl-8"><div class="card h-100"><div class="card-header"><strong>Completeness trend by year</strong><div class="chart-subtitle">Raw Category, analytical Category-or-Sub-Category, and coordinate completion rates.</div></div><div class="card-body chart-body chart-body-lg"><canvas id="qualityYearChart"></canvas></div></div></div>
+  <div class="col-xl-4"><div class="card h-100"><div class="card-header"><strong>Quality by source</strong><div class="chart-subtitle">Compare Fire, Crime, Traffic and CCTV records.</div></div><div class="card-body chart-body chart-body-lg"><canvas id="qualitySourceChart"></canvas></div></div></div>
+</div>
+
+<div class="row g-4 mb-4">
+  <div class="col-xl-7"><div class="card h-100"><div class="card-header"><strong>Field completeness review</strong><div class="chart-subtitle">Missing values requiring source-system or import improvement.</div></div><div class="card-body"><div class="row g-3">
+    {% with total=payload.total %}
+    <div class="col-md-6"><div class="d-flex justify-content-between small mb-1"><span>Raw Category missing</span><strong>{{ payload.metrics.missing_category_pct }}%</strong></div><div class="quality-progress warning"><span style="width:{{ payload.metrics.missing_category_pct }}%"></span></div></div>
+    <div class="col-md-6"><div class="d-flex justify-content-between small mb-1"><span>Both category fields missing</span><strong>{{ payload.metrics.missing_both_category_fields_pct }}%</strong></div><div class="quality-progress danger"><span style="width:{{ payload.metrics.missing_both_category_fields_pct }}%"></span></div></div>
+    <div class="col-md-6"><div class="d-flex justify-content-between small mb-1"><span>Description missing</span><strong>{{ payload.metrics.missing_description_pct }}%</strong></div><div class="quality-progress warning"><span style="width:{{ payload.metrics.missing_description_pct }}%"></span></div></div>
+    <div class="col-md-6"><div class="d-flex justify-content-between small mb-1"><span>Station missing</span><strong>{{ payload.metrics.missing_station_pct }}%</strong></div><div class="quality-progress warning"><span style="width:{{ payload.metrics.missing_station_pct }}%"></span></div></div>
+    <div class="col-md-6"><div class="d-flex justify-content-between small mb-1"><span>Feedback missing</span><strong>{{ payload.metrics.missing_feedback_pct }}%</strong></div><div class="quality-progress danger"><span style="width:{{ payload.metrics.missing_feedback_pct }}%"></span></div></div>
+    <div class="col-md-6"><div class="d-flex justify-content-between small mb-1"><span>Processing result missing</span><strong>{{ payload.metrics.missing_processing_pct }}%</strong></div><div class="quality-progress danger"><span style="width:{{ payload.metrics.missing_processing_pct }}%"></span></div></div>
+    {% endwith %}
+  </div></div></div></div>
+  <div class="col-xl-5"><div class="card h-100"><div class="card-header"><strong>Expected coordinate boundary</strong><div class="chart-subtitle">Coordinate validation rule used by the dashboard.</div></div><div class="card-body"><dl class="row mb-0"><dt class="col-7">Minimum latitude</dt><dd class="col-5 text-end">{{ payload.ugandan_bounds.min_lat }}</dd><dt class="col-7">Maximum latitude</dt><dd class="col-5 text-end">{{ payload.ugandan_bounds.max_lat }}</dd><dt class="col-7">Minimum longitude</dt><dd class="col-5 text-end">{{ payload.ugandan_bounds.min_lon }}</dd><dt class="col-7">Maximum longitude</dt><dd class="col-5 text-end">{{ payload.ugandan_bounds.max_lon }}</dd></dl><div class="alert alert-warning mt-3 mb-0 small">Coordinates outside this operational boundary are retained but flagged for review.</div></div></div></div>
+</div>
+
+<div class="row g-4">
+  <div class="col-xl-6"><div class="card h-100"><div class="card-header"><strong>Cross-source duplicate event IDs</strong><div class="chart-subtitle">The database prevents duplicates within the same source; this list identifies IDs repeated across sources.</div></div><div class="table-responsive"><table class="table mb-0"><thead><tr><th>Event ID</th><th class="text-end">Occurrences</th></tr></thead><tbody>{% for row in payload.duplicate_event_ids %}<tr><td>{{ row.event_id }}</td><td class="text-end fw-bold">{{ row.total }}</td></tr>{% empty %}<tr><td colspan="2" class="empty-state">No repeated event IDs detected across sources.</td></tr>{% endfor %}</tbody></table></div></div></div>
+  <div class="col-xl-6"><div class="card h-100"><div class="card-header"><strong>Recent import health</strong><div class="chart-subtitle">Latest upload and bundled-import outcomes.</div></div><div class="table-responsive"><table class="table mb-0"><thead><tr><th>File</th><th>Status</th><th class="text-end">Imported</th></tr></thead><tbody>{% for upload in uploads %}<tr><td>{{ upload.original_name|truncatechars:36 }}</td><td><span class="badge {% if upload.status == 'FAILED' %}text-bg-danger{% elif upload.status == 'COMPLETED' %}text-bg-success{% else %}text-bg-secondary{% endif %}">{{ upload.get_status_display }}</span></td><td class="text-end">{{ upload.rows_imported }}</td></tr>{% empty %}<tr><td colspan="3" class="empty-state">No imports recorded.</td></tr>{% endfor %}</tbody></table></div></div></div>
+</div>
+{{ payload|json_script:'analytics-data' }}
+{% endblock %}
+{% block scripts %}<script src="{% static 'incidents/js/analytics.js' %}?v=gis-map-report-2"></script>{% endblock %}

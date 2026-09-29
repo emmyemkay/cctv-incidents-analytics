@@ -1,0 +1,94 @@
+<form method="get" class="card filter-card mb-4" id="analyticsFilterForm">
+  <div class="card-body">
+    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+      <div>
+        <div class="fw-bold text-navy"><i class="fa-solid fa-sliders me-2 text-primary"></i>Global analytical filters</div>
+        <div class="small text-secondary">The same filters apply across cards, charts, maps and exports.</div>
+      </div>
+      <div class="d-flex gap-2">
+        <button class="btn btn-sm btn-outline-secondary" type="button" data-bs-toggle="collapse" data-bs-target="#advancedFilters"><i class="fa-solid fa-gears me-1"></i>Advanced</button>
+        <a class="btn btn-sm btn-outline-secondary" href="{{ request.path }}"><i class="fa-solid fa-rotate-left me-1"></i>Reset</a>
+      </div>
+    </div>
+    <div class="row g-3 align-items-end">
+      <div class="col-sm-6 col-xl-2">
+        <label class="form-label">Source</label>
+        <select name="source" class="form-select">
+          <option value="">All sources</option>
+          {% for value,label in sources %}<option value="{{ value }}" {% if filters.source == value %}selected{% endif %}>{{ label }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="col-sm-6 col-xl-2">
+        <label class="form-label">Year</label>
+        <select name="year" class="form-select">
+          <option value="">All years</option>
+          {% for value in years %}<option value="{{ value }}" {% if filters.year == value|stringformat:'s' %}selected{% endif %}>{{ value }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="col-sm-6 col-xl-2">
+        <label class="form-label">Category</label>
+        <select name="category" class="form-select">
+          <option value="">All categories</option>
+          {% for value in categories %}<option value="{{ value }}" {% if filters.category == value %}selected{% endif %}>{{ value }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="col-sm-6 col-xl-2">
+        <label class="form-label">Area / station</label>
+        <select name="station" class="form-select">
+          <option value="">All areas</option>
+          {% for value in stations %}<option value="{{ value }}" {% if filters.station == value %}selected{% endif %}>{{ value }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="col-sm-6 col-xl-3">
+        <label class="form-label">Search</label>
+        <input name="q" class="form-control" value="{{ filters.q }}" placeholder="ID, location, narrative, station…">
+      </div>
+      <div class="col-sm-6 col-xl-1 d-grid">
+        <button class="btn btn-primary" title="Apply filters"><i class="fa-solid fa-filter me-1"></i><span class="d-xl-none">Apply</span></button>
+      </div>
+    </div>
+    <div class="collapse {% if filters.status or filters.branch or filters.sub_category or filters.command_center or filters.coordinate or filters.date_from or filters.date_to %}show{% endif %}" id="advancedFilters">
+      <hr class="my-3">
+      <div class="row g-3 align-items-end">
+        <div class="col-sm-6 col-xl-2">
+          <label class="form-label">From date</label>
+          <input type="date" name="date_from" class="form-control" value="{{ filters.date_from }}">
+        </div>
+        <div class="col-sm-6 col-xl-2">
+          <label class="form-label">To date</label>
+          <input type="date" name="date_to" class="form-control" value="{{ filters.date_to }}">
+        </div>
+        <div class="col-sm-6 col-xl-2">
+          <label class="form-label">Status</label>
+          <select name="status" class="form-select">
+            <option value="">All statuses</option>
+            {% for value in statuses %}<option value="{{ value }}" {% if filters.status == value %}selected{% endif %}>{{ value }}</option>{% endfor %}
+          </select>
+        </div>
+        <div class="col-sm-6 col-xl-2">
+          <label class="form-label">Governing branch</label>
+          <select name="branch" class="form-select">
+            <option value="">All branches</option>
+            {% for value in branches %}<option value="{{ value }}" {% if filters.branch == value %}selected{% endif %}>{{ value }}</option>{% endfor %}
+          </select>
+        </div>
+        <div class="col-sm-6 col-xl-2">
+          <label class="form-label">Command Center</label>
+          <select name="command_center" class="form-select">
+            <option value="">Include all</option>
+            <option value="only" {% if filters.command_center == 'only' %}selected{% endif %}>Command Center only</option>
+            <option value="exclude" {% if filters.command_center == 'exclude' %}selected{% endif %}>Exclude Command Center</option>
+          </select>
+        </div>
+        <div class="col-sm-6 col-xl-2">
+          <label class="form-label">Coordinate coverage</label>
+          <select name="coordinate" class="form-select">
+            <option value="">All records</option>
+            <option value="mapped" {% if filters.coordinate == 'mapped' %}selected{% endif %}>Mapped only</option>
+            <option value="unmapped" {% if filters.coordinate == 'unmapped' %}selected{% endif %}>Unmapped only</option>
+          </select>
+        </div>
+      </div>
+    </div>
+  </div>
+</form>

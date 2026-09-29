@@ -1,0 +1,29 @@
+{% load static %}
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Incident Intelligence Report</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+  <style>
+    body{font-family:Arial,sans-serif;color:#182536;background:#f3f6fa}.report{max-width:1200px;margin:24px auto;background:white;padding:34px;border:1px solid #dce5ee}.report-head{border-bottom:3px solid #163f64;padding-bottom:18px;margin-bottom:24px}.kpi{border:1px solid #dce5ee;border-radius:8px;padding:14px;height:100%}.kpi-label{font-size:11px;text-transform:uppercase;color:#6a7b8f;font-weight:bold}.kpi-value{font-size:26px;font-weight:bold;color:#0b2c49;margin-top:5px}.chart-wrap{height:300px}.table{font-size:12px}@media print{body{background:white}.report{border:0;margin:0;max-width:none;padding:0}.no-print{display:none!important}.chart-wrap{height:260px}.page-break{break-before:page}}
+  </style>
+</head>
+<body>
+<div class="report">
+  <div class="no-print d-flex justify-content-end mb-3"><button class="btn btn-primary" onclick="window.print()">Print / Save as PDF</button></div>
+  <div class="report-head d-flex justify-content-between align-items-start"><div><h1 class="h3 mb-1">Operational Incident Intelligence Report</h1><div class="text-secondary">Fire, General Crime, Traffic and CCTV incident analysis</div></div><div class="text-end small"><strong>Generated:</strong><br>{{ generated_at|date:'d M Y H:i T' }}</div></div>
+  <div class="row g-3 mb-4">
+    <div class="col"><div class="kpi"><div class="kpi-label">Total incidents</div><div class="kpi-value">{{ payload.kpis.total }}</div></div></div>
+    <div class="col"><div class="kpi"><div class="kpi-label">Mapped</div><div class="kpi-value">{{ payload.kpis.mapped_pct }}%</div></div></div>
+    <div class="col"><div class="kpi"><div class="kpi-label">Leading area</div><div class="fw-bold mt-2">{{ payload.kpis.top_hotspot }}</div><div class="small text-secondary">{{ payload.kpis.top_hotspot_total }} incidents</div></div></div>
+    <div class="col"><div class="kpi"><div class="kpi-label">Leading category</div><div class="fw-bold mt-2">{{ payload.kpis.top_category }}</div><div class="small text-secondary">{{ payload.kpis.top_category_total }} incidents</div></div></div>
+  </div>
+  <div class="row g-4 mb-4"><div class="col-6"><h2 class="h6">Monthly trend</h2><div class="chart-wrap"><canvas id="trendChart"></canvas></div></div><div class="col-6"><h2 class="h6">Incident sources</h2><div class="chart-wrap"><canvas id="sourceChart"></canvas></div></div></div>
+  <div class="row g-4 mb-4"><div class="col-6"><h2 class="h6">Leading categories</h2><div class="chart-wrap"><canvas id="categoryChart"></canvas></div></div><div class="col-6"><h2 class="h6">Leading operational areas</h2><div class="chart-wrap"><canvas id="hotspotChart"></canvas></div></div></div>
+  <div class="page-break"><h2 class="h5 mb-3">Incident detail sample</h2><table class="table table-bordered"><thead><tr><th>Date</th><th>Event ID</th><th>Source</th><th>Category</th><th>Station</th><th>Status</th></tr></thead><tbody>{% for incident in records %}<tr><td>{{ incident.reported_at|date:'d M Y H:i' }}</td><td>{{ incident.event_id }}</td><td>{{ incident.source_type }}</td><td>{{ incident.analytical_category|default:'—' }}</td><td>{{ incident.police_station|default:'—' }}</td><td>{{ incident.event_status|default:'—' }}</td></tr>{% endfor %}</tbody></table><div class="small text-secondary">The detail table is limited to the latest 100 records matching the selected filters. Use CSV or Excel export for the complete dataset.</div></div>
+</div>
+{{ payload|json_script:'analytics-data' }}
+<script src="{% static 'incidents/js/analytics.js' %}?v=gis-map-report-2"></script>
+</body></html>

@@ -1,0 +1,22 @@
+{% extends 'incidents/base.html' %}
+{% load static %}
+{% block title %}Predictive Insights · Incident Intelligence{% endblock %}
+{% block page_title %}Predictive and Anomaly Intelligence{% endblock %}
+{% block content %}
+<div class="page-heading"><div><h1>Predictive and Anomaly Intelligence</h1><p>Use rolling baselines, trend projection and narrative themes to identify unusual changes and likely near-term workload.</p></div><span class="badge text-bg-warning">Decision support — not a guaranteed forecast</span></div>
+{% include 'incidents/partials/analytics_filters.html' %}
+<div class="alert alert-info border"><i class="fa-solid fa-circle-info me-2"></i>The forecast is a transparent linear projection from the latest 12 monthly totals. It should be interpreted alongside data completeness, partial-year coverage and operational changes.</div>
+<div class="row g-3 mb-4">
+  <div class="col-sm-6 col-xl-3"><div class="card metric-card"><div class="card-body"><div class="metric-label">Monthly periods</div><div class="metric-value">{{ payload.kpis.months }}</div><div class="metric-foot">Periods available for modelling</div></div></div></div>
+  <div class="col-sm-6 col-xl-3"><div class="card metric-card metric-orange"><div class="card-body"><div class="metric-label">Anomalous months</div><div class="metric-value">{{ payload.kpis.anomalies }}</div><div class="metric-foot">At least 25% from baseline</div></div></div></div>
+  <div class="col-sm-6 col-xl-3"><div class="card metric-card metric-purple"><div class="card-body"><div class="metric-label">Latest month total</div><div class="metric-value">{{ payload.kpis.latest_total }}</div><div class="metric-foot">Latest recorded monthly bucket</div></div></div></div>
+  <div class="col-sm-6 col-xl-3"><div class="card metric-card metric-green"><div class="card-body"><div class="metric-label">Next-month projection</div><div class="metric-value">{{ payload.kpis.forecast_next }}</div><div class="metric-foot">Linear trend estimate</div></div></div></div>
+</div>
+<div class="card mb-4"><div class="card-header"><strong>Actual volume, rolling baseline and projection</strong><div class="chart-subtitle">Three-month rolling average and three projected months.</div></div><div class="card-body chart-body chart-body-xl"><canvas id="forecastChart"></canvas></div></div>
+<div class="row g-4">
+  <div class="col-xl-7"><div class="card h-100"><div class="card-header"><strong>Detected monthly anomalies</strong><div class="chart-subtitle">Months substantially above or below the prior three-month average.</div></div><div class="table-responsive"><table class="table mb-0"><thead><tr><th>Month</th><th class="text-end">Actual</th><th class="text-end">Baseline</th><th class="text-end">Change</th></tr></thead><tbody>{% for row in payload.anomalies %}<tr><td>{{ row.month }}</td><td class="text-end fw-bold">{{ row.total }}</td><td class="text-end">{{ row.baseline }}</td><td class="text-end"><span class="badge {% if row.change > 0 %}text-bg-danger{% else %}text-bg-success{% endif %}">{{ row.change }}%</span></td></tr>{% empty %}<tr><td colspan="4" class="empty-state">No material anomalies detected.</td></tr>{% endfor %}</tbody></table></div></div></div>
+  <div class="col-xl-5"><div class="card h-100"><div class="card-header"><strong>Frequent narrative themes</strong><div class="chart-subtitle">Common meaningful terms from the latest 20,000 non-empty descriptions.</div></div><div class="card-body chart-body chart-body-xl"><canvas id="themeChart"></canvas></div></div></div>
+</div>
+{{ payload|json_script:'analytics-data' }}
+{% endblock %}
+{% block scripts %}<script src="{% static 'incidents/js/analytics.js' %}?v=gis-map-report-2"></script>{% endblock %}

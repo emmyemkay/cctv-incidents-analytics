@@ -1,0 +1,48 @@
+{% extends 'incidents/base.html' %}
+{% load static %}
+{% block title %}Hotspots & Patterns · Incident Intelligence{% endblock %}
+{% block page_title %}Hotspots, Categories and Time Patterns{% endblock %}
+{% block content %}
+<div class="page-heading">
+  <div>
+    <h1>Hotspots and Incident Patterns</h1>
+    <p>One focused workspace for area workload, category mix, reporting trends and peak operating periods.</p>
+  </div>
+  <a class="btn btn-sm btn-outline-primary" href="{% url 'incidents:incident_list' %}?{{ request.GET.urlencode }}"><i class="fa-solid fa-table-list me-1"></i>View matching incidents</a>
+</div>
+
+{% include 'incidents/partials/analytics_filters.html' %}
+
+<div class="row g-3 mb-4">
+  <div class="col-sm-6 col-xl-3"><div class="card metric-card h-100"><div class="card-body"><div class="metric-label">Mapped area incidents</div><div class="metric-value">{{ payload.area.kpis.total }}</div><div class="metric-foot">Usable operational area records</div></div></div></div>
+  <div class="col-sm-6 col-xl-3"><div class="card metric-card metric-purple h-100"><div class="card-body"><div class="metric-label">Operational areas</div><div class="metric-value">{{ payload.area.kpis.distinct_areas }}</div><div class="metric-foot">Distinct stations and areas</div></div></div></div>
+  <div class="col-sm-6 col-xl-3"><div class="card metric-card metric-orange h-100"><div class="card-body"><div class="metric-label">Incident categories</div><div class="metric-value">{{ payload.category.kpis.distinct_categories }}</div><div class="metric-foot">Categories in the selection</div></div></div></div>
+  <div class="col-sm-6 col-xl-3"><div class="card metric-card metric-green h-100"><div class="card-body"><div class="metric-label">Peak reporting hour</div><div class="metric-text">{{ payload.time.kpis.peak_hour }}</div><div class="metric-foot">{{ payload.time.kpis.peak_hour_total }} incidents</div></div></div></div>
+</div>
+
+<div class="row g-4 mb-4">
+  <div class="col-xl-5"><div class="card h-100"><div class="card-header"><strong>Leading areas and stations</strong><div class="chart-subtitle">Ranked incident workload, including Command Center as one normalized area.</div></div><div class="card-body chart-body chart-body-xl"><canvas id="areaTotalsChart"></canvas></div></div></div>
+  <div class="col-xl-7"><div class="card h-100"><div class="card-header"><strong>Category mix by area</strong><div class="chart-subtitle">How the leading categories are distributed across high-volume areas.</div></div><div class="card-body chart-body chart-body-xl"><canvas id="categoryAreaChart"></canvas></div></div></div>
+</div>
+
+<div class="row g-4 mb-4">
+  <div class="col-12"><div class="card"><div class="card-header"><strong>Field-station workload concentration</strong><div class="chart-subtitle">Pareto view showing incident volume and cumulative workload share. The 80% line identifies where operational demand is concentrated.</div></div><div class="card-body chart-body chart-body-xl"><canvas id="stationParetoChart"></canvas></div></div></div>
+</div>
+
+<div class="row g-4 mb-4">
+  <div class="col-xl-8"><div class="card h-100"><div class="card-header"><strong>Leading categories over time</strong><div class="chart-subtitle">Monthly trend comparison for the highest-volume categories.</div></div><div class="card-body chart-body chart-body-xl"><canvas id="categoryTimeChart"></canvas></div></div></div>
+  <div class="col-xl-4"><div class="card h-100"><div class="card-header"><strong>Incidents by weekday</strong><div class="chart-subtitle">Weekly operating pressure.</div></div><div class="card-body chart-body chart-body-xl"><canvas id="weekdayChart"></canvas></div></div></div>
+</div>
+
+<div class="row g-4 mb-4">
+  <div class="col-xl-7"><div class="card h-100"><div class="card-header"><strong>Twenty-four-hour workload</strong><div class="chart-subtitle">Incident reporting volume by hour of day.</div></div><div class="card-body chart-body chart-body-lg"><canvas id="hourChart"></canvas></div></div></div>
+  <div class="col-xl-5"><div class="card h-100"><div class="card-header"><strong>Weekday × hour heatmap</strong><div class="chart-subtitle">Darker cells indicate higher incident volume.</div></div><div class="card-body"><div id="timeHeatmap" class="time-heatmap"></div></div></div></div>
+</div>
+
+<div class="card">
+  <div class="card-header"><strong>Area × category matrix</strong><div class="chart-subtitle">Exact counts for the leading operational areas and categories.</div></div>
+  <div class="table-responsive"><table class="table analytics-matrix mb-0"><thead><tr><th>Area / station</th>{% for category in payload.area.category_area.categories %}<th class="text-center">{{ category }}</th>{% endfor %}<th class="text-center">Total</th></tr></thead><tbody>{% for row in payload.area.category_area.matrix %}<tr><th><a href="{% url 'incidents:station_profile' row.area %}">{{ row.area }}</a></th>{% for count in row.counts %}<td class="matrix-cell">{{ count }}</td>{% endfor %}<td class="text-center fw-bold">{{ row.total }}</td></tr>{% empty %}<tr><td class="empty-state">No matrix data for the selected filters.</td></tr>{% endfor %}</tbody></table></div>
+</div>
+{{ payload|json_script:'analytics-data' }}
+{% endblock %}
+{% block scripts %}<script src="{% static 'incidents/js/consolidated-analytics.js' %}"></script>{% endblock %}

@@ -1,0 +1,47 @@
+{% extends 'incidents/base.html' %}
+{% load static %}
+{% block title %}Operations & Outcomes · Incident Intelligence{% endblock %}
+{% block page_title %}Operations, Dispatch and Outcomes{% endblock %}
+{% block content %}
+<div class="page-heading">
+  <div>
+    <h1>Operations and Outcome Intelligence</h1>
+    <p>One operational view of Command Center workload, field assignment, workflow status and unresolved incidents.</p>
+  </div>
+  <a class="btn btn-sm btn-outline-primary" href="{% url 'incidents:incident_list' %}?{{ request.GET.urlencode }}"><i class="fa-solid fa-table-list me-1"></i>View matching incidents</a>
+</div>
+
+{% include 'incidents/partials/analytics_filters.html' %}
+
+<div class="row g-3 mb-4">
+  <div class="col-sm-6 col-xl-3"><div class="card metric-card h-100"><div class="card-body"><div class="metric-label">Command Center involvement</div><div class="metric-value">{{ payload.command.kpis.total }}</div><div class="metric-foot">{{ payload.command.kpis.share }}% of selected incidents</div></div></div></div>
+  <div class="col-sm-6 col-xl-3"><div class="card metric-card metric-purple h-100"><div class="card-body"><div class="metric-label">Field dispatches</div><div class="metric-value">{{ payload.command.kpis.dispatched }}</div><div class="metric-foot">Sent from Command Center to field stations</div></div></div></div>
+  <div class="col-sm-6 col-xl-3"><div class="card metric-card metric-orange h-100"><div class="card-body"><div class="metric-label">Cross-station transfers</div><div class="metric-value">{{ payload.dispatch.kpis.transferred }}</div><div class="metric-foot">{{ payload.dispatch.kpis.transfer_pct }}% of eligible assignments</div></div></div></div>
+  <div class="col-sm-6 col-xl-3"><div class="card metric-card metric-green h-100"><div class="card-body"><div class="metric-label">Closed / resolved</div><div class="metric-value">{{ payload.status.kpis.closed }}</div><div class="metric-foot">{{ payload.status.kpis.closed_pct }}% closure level</div></div></div></div>
+</div>
+
+<div class="row g-4 mb-4">
+  <div class="col-xl-7"><div class="card h-100"><div class="card-header"><strong>Command Center workload over time</strong><div class="chart-subtitle">Monthly incidents involving Command Center as branch or operational area.</div></div><div class="card-body chart-body chart-body-lg"><canvas id="commandTrendChart"></canvas></div></div></div>
+  <div class="col-xl-5"><div class="card h-100"><div class="card-header"><strong>Current workflow status</strong><div class="chart-subtitle">Open, dispatched, delivered and resolved states.</div></div><div class="card-body chart-body chart-body-lg"><canvas id="operationsStatusChart"></canvas></div></div></div>
+</div>
+
+<div class="row g-4 mb-4">
+  <div class="col-xl-6"><div class="card h-100"><div class="card-header"><strong>Leading field destinations</strong><div class="chart-subtitle">Stations receiving Command Center assignments.</div></div><div class="card-body chart-body chart-body-xl"><canvas id="commandDestinationsChart"></canvas></div></div></div>
+  <div class="col-xl-6"><div class="card h-100"><div class="card-header"><strong>Governing branch workload</strong><div class="chart-subtitle">Branches initiating or governing incident assignments.</div></div><div class="card-body chart-body chart-body-xl"><canvas id="dispatchBranchChart"></canvas></div></div></div>
+</div>
+
+<div class="row g-4 mb-4">
+  <div class="col-xl-7">
+    <div class="card h-100"><div class="card-header"><strong>Largest cross-station flows</strong><div class="chart-subtitle">The busiest branch-to-station transfer routes.</div></div><div class="table-responsive"><table class="table table-hover align-middle mb-0"><thead><tr><th>Governing branch</th><th></th><th>Receiving station</th><th class="text-end">Incidents</th></tr></thead><tbody>{% for row in payload.dispatch.top_flows|slice:':12' %}<tr><td>{{ row.governing_branch }}</td><td class="flow-arrow"><i class="fa-solid fa-arrow-right"></i></td><td><a href="{% url 'incidents:station_profile' row.police_station %}">{{ row.police_station }}</a></td><td class="text-end fw-bold">{{ row.total }}</td></tr>{% empty %}<tr><td colspan="4" class="empty-state">No transfer flows match the filters.</td></tr>{% endfor %}</tbody></table></div></div>
+  </div>
+  <div class="col-xl-5"><div class="card h-100"><div class="card-header"><strong>Closure rate by station</strong><div class="chart-subtitle">Resolution level for the busiest stations.</div></div><div class="card-body chart-body chart-body-xl"><canvas id="stationClosureChart"></canvas></div></div></div>
+</div>
+
+<div class="row g-4 mb-4">
+  <div class="col-12"><div class="card"><div class="card-header"><strong>Unresolved incident aging</strong><div class="chart-subtitle">Age distribution relative to the latest incident in the selected reporting period.</div></div><div class="card-body chart-body chart-body-lg"><canvas id="operationsAgingChart"></canvas></div></div></div>
+</div>
+
+<div class="card"><div class="card-header d-flex flex-wrap justify-content-between gap-2"><div><strong>Oldest unresolved incidents</strong><div class="chart-subtitle">Priority follow-up list ordered by reporting date.</div></div><a class="small" href="{% url 'incidents:data_quality' %}">Review outcome data quality</a></div><div class="table-responsive"><table class="table table-hover mb-0"><thead><tr><th>Reported</th><th>Event ID</th><th>Category</th><th>Station</th><th>Status</th><th>Location</th></tr></thead><tbody>{% for row in payload.status.old_unresolved|slice:':20' %}<tr><td class="text-nowrap">{{ row.reported_at|date:'d M Y H:i' }}</td><td>{{ row.event_id }}</td><td>{% if row.category %}<a href="{% url 'incidents:category_profile' row.category %}">{{ row.category }}</a>{% else %}—{% endif %}</td><td>{% if row.police_station %}<a href="{% url 'incidents:station_profile' row.police_station %}">{{ row.police_station }}</a>{% else %}—{% endif %}</td><td>{{ row.event_status|default:'—' }}</td><td>{{ row.incident_location|default:'—'|truncatechars:60 }}</td></tr>{% empty %}<tr><td colspan="6" class="empty-state">No unresolved incidents match the filters.</td></tr>{% endfor %}</tbody></table></div></div>
+{{ payload|json_script:'analytics-data' }}
+{% endblock %}
+{% block scripts %}<script src="{% static 'incidents/js/consolidated-analytics.js' %}"></script>{% endblock %}

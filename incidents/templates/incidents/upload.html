@@ -1,0 +1,133 @@
+{% extends 'incidents/base.html' %}
+{% block title %}Upload Datasets{% endblock %}
+{% block page_title %}Dataset Upload{% endblock %}
+{% block content %}
+<div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-4">
+  <div>
+    <h1 class="h3 mb-1">Incident Dataset Upload</h1>
+    <p class="text-secondary mb-0">Upload Fire, General Crime, Traffic, and CCTV event files into one analytics database.</p>
+  </div>
+  <a href="{% url 'incidents:home' %}" class="btn btn-outline-primary">
+    <i class="fa-solid fa-chart-line me-2"></i>Command overview
+  </a>
+</div>
+
+<div class="row g-3 mb-4">
+  <div class="col-6 col-xl"><div class="card metric-card"><div class="card-body"><div class="metric-label">All incidents</div><div class="metric-value">{{ incident_total }}</div></div></div></div>
+  <div class="col-6 col-xl"><div class="card metric-card"><div class="card-body"><div class="metric-label">Fire</div><div class="metric-value">{{ fire_count }}</div></div></div></div>
+  <div class="col-6 col-xl"><div class="card metric-card"><div class="card-body"><div class="metric-label">General crime</div><div class="metric-value">{{ crime_count }}</div></div></div></div>
+  <div class="col-6 col-xl"><div class="card metric-card"><div class="card-body"><div class="metric-label">Traffic</div><div class="metric-value">{{ traffic_count }}</div></div></div></div>
+  <div class="col-6 col-xl"><div class="card metric-card"><div class="card-body"><div class="metric-label">CCTV stream</div><div class="metric-value">{{ cctv_count }}</div></div></div></div>
+</div>
+
+<div class="row g-4">
+  <div class="col-xl-5">
+    <div class="card h-100">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <strong>Upload one or more CSV files</strong>
+        <span class="badge text-bg-primary">Multi-file</span>
+      </div>
+      <div class="card-body">
+        <div class="alert alert-light border small">
+          <div class="fw-semibold mb-1"><i class="fa-solid fa-circle-info me-2 text-primary"></i>Supported supplied files</div>
+          <div>FIRE-INCIDENTS-2020-2024.csv</div>
+          <div>GENERAL-CRIME-2020-2024.csv</div>
+          <div>TRAFFIC-INCIDENTS-2020-2024.csv</div>
+        </div>
+        <p class="text-secondary">
+          Select all three files together. The importer detects the extra report-title row, handles UTF-8 and Windows-1252 encodings, validates dates and coordinates, and prevents duplicate event IDs.
+        </p>
+        <form method="post" enctype="multipart/form-data" class="vstack gap-3" id="datasetUploadForm">
+          {% csrf_token %}
+          {% for hidden in form.hidden_fields %}{{ hidden }}{% endfor %}
+          <div>
+            <label class="form-label fw-semibold" for="{{ form.files.id_for_label }}">{{ form.files.label }}</label>
+            {{ form.files }}
+            {% if form.files.help_text %}<div class="form-text">{{ form.files.help_text }}</div>{% endif %}
+            {% for error in form.files.errors %}<div class="text-danger small mt-1">{{ error }}</div>{% endfor %}
+            <div id="selectedFiles" class="small text-secondary mt-2">No files selected.</div>
+          </div>
+          <div>
+            <label class="form-label fw-semibold" for="{{ form.incident_type.id_for_label }}">{{ form.incident_type.label }}</label>
+            {{ form.incident_type }}
+            {% if form.incident_type.help_text %}<div class="form-text">{{ form.incident_type.help_text }}</div>{% endif %}
+            {% for error in form.incident_type.errors %}<div class="text-danger small mt-1">{{ error }}</div>{% endfor %}
+          </div>
+          {% for error in form.non_field_errors %}<div class="alert alert-danger py-2">{{ error }}</div>{% endfor %}
+          <button class="btn btn-primary btn-lg" id="uploadButton">
+            <i class="fa-solid fa-cloud-arrow-up me-2"></i>Upload and queue selected files
+          </button>
+          <div class="form-text">Uploads are stored immediately and imported by a dedicated background worker. You may safely leave this page while processing continues.</div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-xl-7">
+    <div class="card h-100" id="importHistory" data-status-url="{% url 'incidents:api_import_status' %}" data-active="{% if has_active_imports %}1{% else %}0{% endif %}">
+      <div class="card-header d-flex justify-content-between align-items-center"><strong>Import history</strong>{% if has_active_imports %}<span class="badge text-bg-warning"><span class="spinner-border spinner-border-sm me-1"></span>Worker active</span>{% endif %}</div>
+      <div class="table-responsive">
+        <table class="table align-middle mb-0">
+          <thead><tr><th>File</th><th>Type</th><th>Method</th><th>Status</th><th>Imported</th><th>Skipped</th><th>Task</th><th>Time</th></tr></thead>
+          <tbody>
+          {% for upload in uploads %}
+            <tr>
+              <td>
+                <div class="fw-semibold text-break">{{ upload.original_name }}</div>
+                {% if upload.error_message %}<div class="small text-danger">{{ upload.error_message|truncatechars:100 }}</div>{% endif %}
+              </td>
+              <td>{{ upload.get_incident_type_display }}</td>
+              <td>{{ upload.get_import_method_display }}</td>
+              <td>
+                {% if upload.status == 'COMPLETED' %}<span class="badge text-bg-success">Completed</span>
+                {% elif upload.status == 'FAILED' %}<span class="badge text-bg-danger">Failed</span>
+                {% elif upload.status == 'PROCESSING' %}<span class="badge text-bg-warning">Processing</span>
+                {% else %}<span class="badge text-bg-secondary">Pending</span>{% endif %}
+              </td>
+              <td>{{ upload.rows_imported }}</td>
+              <td>{{ upload.rows_skipped }}</td>
+              <td class="small text-secondary">{{ upload.task_id|default:"—"|truncatechars:12 }}</td>
+              <td class="text-nowrap">{{ upload.uploaded_at|date:'d M Y H:i' }}</td>
+            </tr>
+          {% empty %}
+            <tr><td colspan="8" class="text-center text-secondary py-5">No imports recorded yet.</td></tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+(() => {
+  const input = document.getElementById('{{ form.files.id_for_label }}');
+  const list = document.getElementById('selectedFiles');
+  const form = document.getElementById('datasetUploadForm');
+  const button = document.getElementById('uploadButton');
+  if (input) {
+    input.addEventListener('change', () => {
+      const files = Array.from(input.files || []);
+      list.textContent = files.length
+        ? `${files.length} file(s): ${files.map(file => file.name).join(', ')}`
+        : 'No files selected.';
+    });
+  }
+  if (form) {
+    form.addEventListener('submit', () => {
+      button.disabled = true;
+      button.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Queuing datasets…';
+    });
+  }
+  const history = document.getElementById('importHistory');
+  if (history && history.dataset.active === '1') {
+    const poll = () => fetch(history.dataset.statusUrl, { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+      .then(response => response.ok ? response.json() : Promise.reject(new Error('status request failed')))
+      .then(data => { if (data.active > 0) setTimeout(poll, 5000); else window.location.reload(); })
+      .catch(() => setTimeout(poll, 10000));
+    setTimeout(poll, 3000);
+  }
+})();
+</script>
+{% endblock %}

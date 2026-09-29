@@ -1,0 +1,30 @@
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: check-added-large-files
+        args: ["--maxkb=10000"]
+        exclude: ^data/
+      - id: check-merge-conflict
+      - id: check-yaml
+      - id: end-of-file-fixer
+      - id: trailing-whitespace
+      - id: detect-private-key
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.9.10
+    hooks:
+      - id: ruff
+        args: ["--fix"]
+      - id: ruff-format
+  - repo: local
+    hooks:
+      - id: project-structure
+        name: Validate project structure
+        entry: python scripts/validate_project.py
+        language: system
+        pass_filenames: false
+      - id: django-migration-check
+        name: Check Django migrations
+        entry: python manage.py makemigrations --check --dry-run
+        language: system
+        pass_filenames: false

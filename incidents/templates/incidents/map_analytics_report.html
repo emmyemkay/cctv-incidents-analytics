@@ -1,0 +1,259 @@
+{% extends 'incidents/base.html' %}
+{% load static %}
+{% block title %}GIS Map Analytics Report · Incident Intelligence{% endblock %}
+{% block page_title %}GIS Map Analytics Report{% endblock %}
+{% block content %}
+<section class="gis-report-hero mb-4">
+  <div class="gis-report-hero-copy">
+    <div class="gis-report-kicker"><i class="fa-solid fa-map-location-dot"></i> Interactive operational GIS report</div>
+    <h1>Visualisation of Reported Incidents on a GIS Map</h1>
+    <p>Explore the distribution of reported incidents, isolate individual Category layers, compare coordinate coverage and identify locations requiring operational attention.</p>
+  </div>
+  <div class="gis-report-hero-actions">
+    <button class="btn btn-light" type="button" onclick="window.print()"><i class="fa-solid fa-print me-1"></i>Print / Save PDF</button>
+    <a class="btn btn-outline-light" href="{% url 'incidents:export_csv' %}?{{ request.GET.urlencode }}"><i class="fa-solid fa-file-csv me-1"></i>CSV</a>
+    <a class="btn btn-outline-light" href="{% url 'incidents:export_xlsx' %}?{{ request.GET.urlencode }}"><i class="fa-solid fa-file-excel me-1"></i>Excel</a>
+    <a class="btn btn-outline-light" href="{% url 'incidents:data_quality' %}?coordinate=unmapped"><i class="fa-solid fa-map-location-dot me-1"></i>Review unmapped</a>
+  </div>
+</section>
+
+{% include 'incidents/partials/analytics_filters.html' %}
+
+<nav class="gis-report-nav mb-4" aria-label="GIS report sections">
+  <a href="#overall-distribution"><span>1</span>Overall map</a>
+  <a href="#category-layers"><span>2</span>Category layers</a>
+  <a href="#category-comparison"><span>3</span>Map atlas</a>
+  <a href="#repeat-locations"><span>4</span>Repeat locations</a>
+  <a href="#coordinate-quality"><span>5</span>Coordinate quality</a>
+  <a href="#conclusion"><span>6</span>Operational use</a>
+</nav>
+
+<div class="row g-3 mb-4 gis-kpi-strip">
+  <div class="col-sm-6 col-xl-2"><div class="card metric-card h-100"><div class="card-body"><div class="metric-label">Filtered incidents</div><div class="metric-value">{{ payload.kpis.total }}</div><div class="metric-foot">Current analytical selection</div></div></div></div>
+  <div class="col-sm-6 col-xl-2"><div class="card metric-card metric-green h-100"><div class="card-body"><div class="metric-label">Mapped coordinates</div><div class="metric-value">{{ payload.kpis.mapped }}</div><div class="metric-foot">{{ payload.kpis.mapped_pct }}% coordinate coverage</div></div></div></div>
+  <div class="col-sm-6 col-xl-2"><div class="card metric-card metric-orange h-100"><div class="card-body"><div class="metric-label">Unmapped / invalid</div><div class="metric-value">{{ payload.kpis.unmapped }}</div><div class="metric-foot">Requires coordinate improvement</div></div></div></div>
+  <div class="col-sm-6 col-xl-2"><div class="card metric-card metric-purple h-100"><div class="card-body"><div class="metric-label">Mapped categories</div><div class="metric-value">{{ payload.kpis.mapped_categories }}</div><div class="metric-foot">of {{ payload.kpis.all_categories }} resolved categories</div></div></div></div>
+  <div class="col-sm-6 col-xl-2"><div class="card metric-card h-100"><div class="card-body"><div class="metric-label">Mapped stations</div><div class="metric-value">{{ payload.kpis.mapped_stations }}</div><div class="metric-foot">Stations represented geographically</div></div></div></div>
+  <div class="col-sm-6 col-xl-2"><div class="card metric-card h-100"><div class="card-body"><div class="metric-label">Coverage assessment</div><div class="metric-value metric-value-text">{{ payload.kpis.coverage_grade }}</div><div class="metric-foot">Based on valid map coordinates</div></div></div></div>
+</div>
+
+<section class="gis-report-section mb-5" id="overall-distribution">
+  <div class="gis-section-heading">
+    <div class="gis-section-number">1</div>
+    <div><div class="gis-section-kicker">Distribution of call data on reported incidents</div><h2>Overall Incident Distribution</h2><p>Every valid coordinate is plotted using the resolved Category. Category is used first; Sub-Category is used only when Category is empty.</p></div>
+  </div>
+  <div class="row g-4">
+    <div class="col-xxl-9">
+      <div class="card h-100 gis-map-card">
+        <div class="card-header d-flex flex-wrap justify-content-between gap-2 align-items-start">
+          <div><strong>National operational incident map</strong><div class="chart-subtitle">Use the category legend, point/heat controls and map layers to explore geographic concentration.</div></div>
+          <span class="coverage-pill {% if payload.kpis.mapped_pct < 50 %}coverage-risk{% elif payload.kpis.mapped_pct < 80 %}coverage-warning{% else %}coverage-good{% endif %}">{{ payload.kpis.mapped_pct }}% mapped</span>
+        </div>
+        <div class="card-body p-0"><div id="incidentMap" class="gis-main-map" data-map-url="{% url 'incidents:api_map_points' %}?{{ request.GET.urlencode }}"></div></div>
+      </div>
+    </div>
+    <div class="col-xxl-3">
+      <div class="card h-100">
+        <div class="card-header"><strong>Executive map reading</strong><div class="chart-subtitle">Key interpretation points for the filtered selection.</div></div>
+        <div class="card-body">
+          <div class="gis-observation-list">
+            {% for item in payload.observations %}
+            <div class="gis-observation gis-observation-{{ item.severity }}">
+              <div class="gis-observation-label">{{ item.label }}</div>
+              <div class="gis-observation-value">{{ item.value }}</div>
+              <div class="gis-observation-detail">{{ item.detail }}</div>
+            </div>
+            {% endfor %}
+          </div>
+          <div class="gis-report-note mt-3"><i class="fa-solid fa-circle-info"></i><span>Map conclusions should be read together with coordinate coverage. Unmapped incidents remain in totals but cannot influence visible geographic hotspots.</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="gis-report-section mb-5" id="category-layers">
+  <div class="gis-section-heading">
+    <div class="gis-section-number">2</div>
+    <div><div class="gis-section-kicker">Separate analytical map layers</div><h2>Category Map Layers</h2><p>The supplied GIS report used separate maps for major incident classes. This interactive layer workspace applies the same concept to the actual Category values in the project.</p></div>
+  </div>
+
+  {% if payload.priority_layers %}
+  <div class="category-layer-selector mb-3" id="priorityLayerButtons" aria-label="Priority category layers">
+    {% for layer in payload.priority_layers %}
+    <button type="button" class="category-layer-button {% if layer.category == initial_focus_category %}active{% endif %}"
+            data-category="{{ layer.category }}"
+            data-total="{{ layer.total }}"
+            data-mapped="{{ layer.mapped }}"
+            data-unmapped="{{ layer.unmapped }}"
+            data-coverage="{{ layer.coverage_pct }}"
+            data-share="{{ layer.mapped_share_pct }}"
+            data-station="{{ layer.top_station }}"
+            data-station-total="{{ layer.top_station_total }}"
+            data-latest="{{ layer.latest|date:'d M Y H:i' }}">
+      <span class="category-layer-index">{{ layer.chapter }}</span>
+      <span class="category-layer-swatch" data-category="{{ layer.category }}"></span>
+      <span class="category-layer-copy"><strong>{{ layer.category }}</strong><small>{{ layer.mapped }} mapped · {{ layer.coverage_pct }}% coverage</small></span>
+    </button>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  <div class="row g-4">
+    <div class="col-xxl-9">
+      <div class="card h-100 gis-map-card">
+        <div class="card-header focused-map-header">
+          <div><strong id="categoryLayerTitle">Selected category map</strong><div class="chart-subtitle" id="categoryLayerSubtitle">Choose a Category layer to display only its valid coordinates.</div></div>
+          <div class="focused-map-toolbar" role="group" aria-label="Selected Category map controls">
+            <span class="category-focus-color" id="categoryFocusColor" aria-hidden="true"></span>
+            <button type="button" class="focused-map-tool active" data-category-mode="points" title="Show Category points"><i class="fa-solid fa-location-dot"></i><span>Points</span></button>
+            <button type="button" class="focused-map-tool" data-category-mode="heat" title="Show density heatmap"><i class="fa-solid fa-fire-flame-curved"></i><span>Heat</span></button>
+            <button type="button" class="focused-map-tool" data-category-mode="both" title="Show points and heatmap"><i class="fa-solid fa-layer-group"></i><span>Both</span></button>
+            <button type="button" class="focused-map-tool" id="fitCategoryMap" title="Fit to visible coordinates"><i class="fa-solid fa-arrows-to-circle"></i><span>Fit</span></button>
+            <button type="button" class="focused-map-tool" id="fullscreenCategoryMap" title="Open full-screen Category map"><i class="fa-solid fa-expand"></i><span>Full</span></button>
+          </div>
+        </div>
+        <div class="card-body p-0 position-relative">
+          <div id="categoryLayerMap" class="gis-category-map"
+               data-base-url="{% url 'incidents:api_map_points' %}"
+               data-base-query="{{ map_query_without_category }}"
+               data-initial-category="{{ initial_focus_category }}"></div>
+          <div class="category-map-loading" id="categoryMapLoading"><span class="spinner-border spinner-border-sm"></span> Loading category coordinates…</div>
+        </div>
+      </div>
+    </div>
+    <div class="col-xxl-3">
+      <div class="card h-100">
+        <div class="card-header"><strong>Selected layer profile</strong><div class="chart-subtitle">Counts and coverage for the active Category.</div></div>
+        <div class="card-body">
+          <div class="category-profile-name" id="focusCategoryName">—</div>
+          <div class="category-profile-grid">
+            <div><span>Total incidents</span><strong id="focusTotal">0</strong></div>
+            <div><span>Mapped</span><strong id="focusMapped">0</strong></div>
+            <div><span>Unmapped</span><strong id="focusUnmapped">0</strong></div>
+            <div><span>Coverage</span><strong id="focusCoverage">0%</strong></div>
+            <div><span>Mapped share</span><strong id="focusShare">0%</strong></div>
+            <div><span>Map points loaded</span><strong id="focusLoaded">0</strong></div>
+          </div>
+          <div class="category-profile-station"><span>Leading mapped station</span><strong id="focusStation">—</strong><small id="focusStationCount">0 mapped incidents</small></div>
+          <div class="category-profile-latest"><i class="fa-regular fa-clock"></i><span>Latest report: <strong id="focusLatest">—</strong></span></div>
+          <a class="btn btn-outline-primary w-100 mt-3" id="focusCategoryProfile" href="#"><i class="fa-solid fa-chart-column me-1"></i>Open full category analysis</a>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="gis-report-section mb-5" id="category-comparison">
+  <div class="gis-section-heading">
+    <div class="gis-section-number">3</div>
+    <div><div class="gis-section-kicker">Comparative category analysis</div><h2>Category Coverage and Map Atlas</h2><p>Compare mapped and unmapped records, then open any exact Category as a dedicated map layer.</p></div>
+  </div>
+  <div class="row g-4 mb-4">
+    <div class="col-xl-7"><div class="card h-100"><div class="card-header"><strong>Mapped versus unmapped by Category</strong><div class="chart-subtitle">Largest categories ranked by valid coordinate count.</div></div><div class="card-body chart-body chart-body-xxl"><canvas id="mappedCategoryChart"></canvas></div></div></div>
+    <div class="col-xl-5"><div class="card h-100"><div class="card-header"><strong>Leading mapped stations</strong><div class="chart-subtitle">Operational areas with the highest number of valid incident coordinates.</div></div><div class="table-responsive"><table class="table mb-0"><thead><tr><th>Station / area</th><th class="text-end">Mapped</th></tr></thead><tbody>{% for row in payload.top_mapped_stations %}<tr><td><a href="{% url 'incidents:station_profile' row.police_station %}">{{ row.police_station }}</a></td><td class="text-end fw-bold">{{ row.total }}</td></tr>{% empty %}<tr><td colspan="2" class="empty-state">No mapped stations.</td></tr>{% endfor %}</tbody></table></div></div></div>
+  </div>
+
+  <div class="card">
+    <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
+      <div><strong>Complete Category map atlas</strong><div class="chart-subtitle">One row per resolved Category; names are not merged.</div></div>
+      <div class="category-atlas-search"><i class="fa-solid fa-magnifying-glass"></i><input type="search" id="categoryAtlasSearch" placeholder="Search Category"></div>
+    </div>
+    <div class="table-responsive category-atlas-table-wrap">
+      <table class="table align-middle mb-0" id="categoryAtlasTable">
+        <thead><tr><th>Category</th><th class="text-end">Total</th><th class="text-end">Mapped</th><th class="text-end">Unmapped</th><th class="text-end">Coverage</th><th>Leading mapped station</th><th class="text-end">Action</th></tr></thead>
+        <tbody>
+        {% for layer in payload.category_layers %}
+          <tr data-category-row="{{ layer.category|lower }}">
+            <td><div class="category-atlas-name"><span class="category-layer-swatch" data-category="{{ layer.category }}"></span><span>{{ layer.category }}</span></div></td>
+            <td class="text-end">{{ layer.total }}</td>
+            <td class="text-end fw-bold">{{ layer.mapped }}</td>
+            <td class="text-end">{{ layer.unmapped }}</td>
+            <td class="text-end"><span class="coverage-mini"><i style="width:{{ layer.coverage_pct }}%"></i></span><strong>{{ layer.coverage_pct }}%</strong></td>
+            <td>{{ layer.top_station }}{% if layer.top_station_total %}<small class="d-block text-secondary">{{ layer.top_station_total }} mapped</small>{% endif %}</td>
+            <td class="text-end"><button type="button" class="btn btn-sm btn-outline-primary open-category-layer"
+                    data-category="{{ layer.category }}"
+                    data-total="{{ layer.total }}"
+                    data-mapped="{{ layer.mapped }}"
+                    data-unmapped="{{ layer.unmapped }}"
+                    data-coverage="{{ layer.coverage_pct }}"
+                    data-share="{{ layer.mapped_share_pct }}"
+                    data-station="{{ layer.top_station }}"
+                    data-station-total="{{ layer.top_station_total }}"
+                    data-latest="{{ layer.latest|date:'d M Y H:i' }}">Map</button></td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="7" class="empty-state">No Category data is available.</td></tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<section class="gis-report-section mb-5" id="repeat-locations">
+  <div class="gis-section-heading">
+    <div class="gis-section-number">4</div>
+    <div><div class="gis-section-kicker">Location and hotspot interpretation</div><h2>Repeat Locations and Category Concentration</h2><p>Move from individual points to recurring places and multi-category locations that may require targeted deployment or further validation.</p></div>
+  </div>
+  <div class="row g-4 mb-4">
+    <div class="col-xl-5"><div class="card h-100"><div class="card-header"><strong>Most repeated locations</strong><div class="chart-subtitle">Free-text incident locations ranked by report count.</div></div><div class="card-body chart-body chart-body-xl"><canvas id="topLocationChart"></canvas></div></div></div>
+    <div class="col-xl-7"><div class="card h-100"><div class="card-header"><strong>Category mix at repeated locations</strong><div class="chart-subtitle">Shows whether recurring locations are dominated by one Category or several.</div></div><div class="card-body chart-body chart-body-xl"><canvas id="categoryLocationChart"></canvas></div></div></div>
+  </div>
+  <div class="row g-4">
+    <div class="col-xl-7"><div class="card h-100"><div class="card-header"><strong>Locations associated with multiple Categories</strong></div><div class="table-responsive"><table class="table mb-0"><thead><tr><th>Location</th><th class="text-end">Incidents</th><th class="text-end">Categories</th></tr></thead><tbody>{% for row in payload.multi_category %}<tr><td>{{ row.incident_location|truncatechars:90 }}</td><td class="text-end fw-bold">{{ row.total }}</td><td class="text-end">{{ row.categories }}</td></tr>{% empty %}<tr><td colspan="3" class="empty-state">No multi-category repeat locations.</td></tr>{% endfor %}</tbody></table></div></div></div>
+    <div class="col-xl-5"><div class="card h-100"><div class="card-header"><strong>Stations with detailed locations</strong></div><div class="table-responsive"><table class="table mb-0"><thead><tr><th>Station / area</th><th class="text-end">Records</th></tr></thead><tbody>{% for row in payload.locations_by_station %}<tr><td><a href="{% url 'incidents:station_profile' row.police_station %}">{{ row.police_station }}</a></td><td class="text-end fw-bold">{{ row.total }}</td></tr>{% empty %}<tr><td colspan="2" class="empty-state">No station location data.</td></tr>{% endfor %}</tbody></table></div></div></div>
+  </div>
+</section>
+
+<section class="gis-report-section mb-5" id="coordinate-quality">
+  <div class="gis-section-heading">
+    <div class="gis-section-number">5</div>
+    <div><div class="gis-section-kicker">Coordinate-quality interpretation</div><h2>What the Map Can and Cannot Represent</h2><p>Mapped hotspots include only valid Uganda coordinates. These quality groups explain which records are excluded and the operational effect of each issue.</p></div>
+  </div>
+  <div class="coordinate-quality-grid mb-4">
+    <div class="coordinate-quality-card quality-valid"><i class="fa-solid fa-circle-check"></i><span>Valid Uganda coordinates</span><strong>{{ payload.coordinate_quality.valid }}</strong><small>{{ payload.coordinate_quality.valid_pct }}% of filtered incidents; included in maps and heatmaps.</small></div>
+    <div class="coordinate-quality-card quality-missing"><i class="fa-solid fa-map-pin"></i><span>Coordinates missing</span><strong>{{ payload.coordinate_quality.missing_both }}</strong><small>No longitude or latitude; excluded from all map layers.</small></div>
+    <div class="coordinate-quality-card quality-partial"><i class="fa-solid fa-code-compare"></i><span>Incomplete coordinate pairs</span><strong>{{ payload.coordinate_quality.partial }}</strong><small>Only one coordinate exists; excluded until the pair is completed.</small></div>
+    <div class="coordinate-quality-card quality-zero"><i class="fa-solid fa-bullseye"></i><span>Zero coordinate pairs</span><strong>{{ payload.coordinate_quality.zero_pair }}</strong><small>Placeholder 0,0 values; never interpreted as Uganda locations.</small></div>
+    <div class="coordinate-quality-card quality-outside"><i class="fa-solid fa-earth-africa"></i><span>Outside Uganda bounds</span><strong>{{ payload.coordinate_quality.outside_uganda }}</strong><small>Present but outside the configured Uganda boundary; review source accuracy.</small></div>
+  </div>
+  <div class="card coordinate-quality-summary">
+    <div class="card-body">
+      <div class="coordinate-quality-bar" aria-label="Coordinate quality distribution">
+        <i class="quality-valid" style="width:{{ payload.coordinate_quality.valid_pct }}%" title="Valid {{ payload.coordinate_quality.valid_pct }}%"></i>
+        <i class="quality-invalid" style="width:{{ payload.coordinate_quality.invalid_pct }}%" title="Invalid {{ payload.coordinate_quality.invalid_pct }}%"></i>
+        <i class="quality-missing" style="width:{{ payload.coordinate_quality.missing_pct }}%" title="Missing {{ payload.coordinate_quality.missing_pct }}%"></i>
+      </div>
+      <div class="coordinate-quality-legend">
+        <span><i class="quality-valid"></i>Valid and mapped</span>
+        <span><i class="quality-invalid"></i>Present but invalid</span>
+        <span><i class="quality-missing"></i>Missing or incomplete</span>
+      </div>
+      <div class="row g-3 mt-1">
+        <div class="col-lg-8"><div class="gis-report-note h-100"><i class="fa-solid fa-triangle-exclamation"></i><span>Geographic concentration is reliable only for the {{ payload.coordinate_quality.valid }} valid records. The remaining {{ payload.kpis.unmapped }} incidents still contribute to Category, time, status and outcome analytics, but not to visible hotspot geometry.</span></div></div>
+        <div class="col-lg-4 d-grid"><a class="btn btn-outline-primary align-content-center" href="{% url 'incidents:data_quality' %}?{{ request.GET.urlencode }}"><i class="fa-solid fa-shield-heart me-1"></i>Open detailed data-quality analysis</a></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="gis-report-section" id="conclusion">
+  <div class="gis-section-heading">
+    <div class="gis-section-number">6</div>
+    <div><div class="gis-section-kicker">Conclusion and operational use</div><h2>How to Use the Map Analytics</h2><p>The interactive report improves on static maps by allowing administrators to change the period, source, Category, station and coordinate scope without producing a new document.</p></div>
+  </div>
+  <div class="row g-3">
+    <div class="col-md-6 col-xl-3"><div class="gis-action-card"><i class="fa-solid fa-people-group"></i><strong>Deployment planning</strong><span>Use category concentration and station hotspots to prioritize patrols and specialist resources.</span></div></div>
+    <div class="col-md-6 col-xl-3"><div class="gis-action-card"><i class="fa-solid fa-crosshairs"></i><strong>Targeted analysis</strong><span>Open individual Category layers to distinguish the geography of breakings, traffic, theft, homicide and other incidents.</span></div></div>
+    <div class="col-md-6 col-xl-3"><div class="gis-action-card"><i class="fa-solid fa-database"></i><strong>Data improvement</strong><span>Use the unmapped count and coverage table to identify sources or Categories requiring better coordinate capture.</span></div></div>
+    <div class="col-md-6 col-xl-3"><div class="gis-action-card"><i class="fa-solid fa-chart-line"></i><strong>Trend follow-up</strong><span>Apply date filters and compare map layers with hotspot, outcome and forecast workspaces before acting.</span></div></div>
+  </div>
+</section>
+
+{{ payload|json_script:'analytics-data' }}
+{% endblock %}
+{% block scripts %}
+<script src="{% static 'incidents/js/analytics.js' %}?v=gis-map-report-2"></script>
+<script src="{% static 'incidents/js/map-report.js' %}?v=gis-map-report-2"></script>
+{% endblock %}

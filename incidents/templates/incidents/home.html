@@ -1,0 +1,94 @@
+{% extends 'incidents/base.html' %}
+{% load static %}
+{% block title %}Command Overview · Incident Intelligence{% endblock %}
+{% block page_title %}Operational Command Overview{% endblock %}
+{% block content %}
+<div class="page-heading">
+  <div>
+    <h1>Operational Incident Intelligence</h1>
+    <p>A concise command view of current incidents, essential indicators, operational insights and geographic activity.</p>
+  </div>
+  <div class="analytics-toolbar">
+    <div class="stream-pill"><span id="streamDot" class="stream-dot"></span><span id="streamStatus">Connecting to live stream…</span></div>
+    <a class="btn btn-sm btn-outline-secondary" href="{% url 'incidents:export_csv' %}?{{ request.GET.urlencode }}"><i class="fa-solid fa-file-csv me-1"></i>CSV</a>
+    <a class="btn btn-sm btn-outline-secondary" href="{% url 'incidents:export_xlsx' %}?{{ request.GET.urlencode }}"><i class="fa-solid fa-file-excel me-1"></i>Excel</a>
+    <a class="btn btn-sm btn-outline-secondary" target="_blank" href="{% url 'incidents:print_report' %}?{{ request.GET.urlencode }}"><i class="fa-solid fa-print me-1"></i>Print</a>
+  </div>
+</div>
+
+<div class="card mb-4 current-incidents-card">
+  <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
+    <div>
+      <strong>Current Reported Incidents</strong>
+      <div class="chart-subtitle">Latest records first. New streamed incidents appear here automatically.</div>
+    </div>
+    <a href="{% url 'incidents:incident_list' %}?{{ request.GET.urlencode }}" class="btn btn-sm btn-outline-primary"><i class="fa-solid fa-table-list me-1"></i>Open full register</a>
+  </div>
+  <div class="table-responsive">
+    <table class="table table-hover align-middle mb-0">
+      <thead><tr><th>Reported</th><th>Source</th><th>Event ID</th><th>Category</th><th>Area / location</th><th>Status</th></tr></thead>
+      <tbody id="liveIncidentRows">
+        {% for incident in recent_incidents %}
+        <tr data-incident-identity="id:{{ incident.pk }}">
+          <td class="text-nowrap">{{ incident.reported_at|date:'d M Y H:i' }}</td>
+          <td><span class="source-badge source-{{ incident.source_type|lower }}">{{ incident.source_type }}</span></td>
+          <td>{{ incident.event_id }}</td>
+          <td>{% if incident.analytical_category %}<a href="{% url 'incidents:category_profile' incident.analytical_category %}">{{ incident.analytical_category }}</a>{% else %}—{% endif %}</td>
+          <td>{% if incident.police_station %}<a href="{% url 'incidents:station_profile' incident.police_station %}">{{ incident.police_station }}</a>{% else %}{{ incident.incident_location|default:'—' }}{% endif %}</td>
+          <td>{{ incident.event_status|default:'—' }}</td>
+        </tr>
+        {% empty %}<tr><td colspan="6" class="empty-state">No incidents match the selected filters.</td></tr>{% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+{% include 'incidents/partials/analytics_filters.html' %}
+
+<div class="data-freshness-banner mb-4">
+  <div><i class="fa-solid fa-clock-rotate-left me-2"></i><strong>Data coverage:</strong>
+    {% if payload.decision_support.first_date_label %}{{ payload.decision_support.first_date_label }} to {{ payload.decision_support.latest_date_label }}{% else %}No reporting period available{% endif %}
+  </div>
+  <div class="small">Period comparisons are anchored to the latest available record, not the server date.</div>
+</div>
+
+<div class="row g-3 mb-4">
+  <div class="col-sm-6 col-xl-3"><div class="card metric-card h-100"><div class="card-body"><div class="metric-label">Total incidents</div><div class="metric-value" id="totalKpi">{{ payload.kpis.total }}</div><div class="metric-foot">Current filtered selection</div></div></div></div>
+  <div class="col-sm-6 col-xl-3"><div class="card metric-card metric-green h-100"><div class="card-body"><div class="metric-label">Latest 30-day volume</div><div class="metric-value">{{ payload.decision_support.current_30 }}</div><div class="metric-foot">Previous period: {{ payload.decision_support.previous_30 }}</div></div></div></div>
+  <div class="col-sm-6 col-xl-3"><div class="card metric-card {% if payload.decision_support.change_direction == 'up' %}metric-red{% else %}metric-green{% endif %} h-100"><div class="card-body"><div class="metric-label">30-day movement</div><div class="metric-value">{{ payload.decision_support.change_pct }}%</div><div class="metric-foot">Compared with the preceding 30 days</div></div></div></div>
+  <div class="col-sm-6 col-xl-3"><div class="card metric-card metric-purple h-100"><div class="card-body"><div class="metric-label">Map-ready incidents</div><div class="metric-value">{{ payload.kpis.mapped }}</div><div class="metric-foot">{{ payload.kpis.mapped_pct }}% valid coordinates</div></div></div></div>
+</div>
+
+<div class="row g-3 mb-4">
+  <div class="col-sm-6 col-xl-3"><div class="card compact-kpi h-100"><div class="card-body"><div class="metric-label">Leading category</div><div class="metric-text">{{ payload.kpis.top_category }}</div><div class="metric-foot">{{ payload.kpis.top_category_total }} incidents</div></div></div></div>
+  <div class="col-sm-6 col-xl-3"><div class="card compact-kpi h-100"><div class="card-body"><div class="metric-label">Leading field station</div><div class="metric-text">{{ payload.kpis.top_field }}</div><div class="metric-foot">{{ payload.kpis.top_field_total }} incidents</div></div></div></div>
+  <div class="col-sm-6 col-xl-3"><div class="card compact-kpi h-100"><div class="card-body"><div class="metric-label">Unresolved over 30 days</div><div class="metric-value-sm">{{ payload.decision_support.aging.4.total|default:0 }}</div><div class="metric-foot">Based on latest dataset date</div></div></div></div>
+  <div class="col-sm-6 col-xl-3"><div class="card compact-kpi h-100"><div class="card-body"><div class="metric-label">Stations covering 80%</div><div class="metric-value-sm">{{ payload.decision_support.field_station_80_count }}</div><div class="metric-foot">Of {{ payload.decision_support.field_station_total }} field stations</div></div></div></div>
+</div>
+
+<div class="row g-3 mb-4">
+  {% for insight in payload.insights|slice:':3' %}<div class="col-md-6 col-xl-4"><div class="insight-card {{ insight.level }}"><div class="insight-icon"><i class="fa-solid {{ insight.icon }}"></i></div><div><div class="insight-title">{{ insight.title }}</div><div class="insight-text">{{ insight.text }}</div></div></div></div>{% endfor %}
+</div>
+
+<div class="row g-4 mb-4">
+  <div class="col-xl-7"><div class="card h-100"><div class="card-header d-flex flex-wrap justify-content-between gap-2"><div><strong>Operational incident map</strong><div class="chart-subtitle">Every valid coordinate uses the resolved Category. Mixed-colour clusters summarise the visible category mix, and the legend explains each category with its own colour.</div></div><a class="small" href="{% url 'incidents:map_report' %}">Open GIS map report</a></div><div class="card-body p-0"><div id="incidentMap" data-map-url="{% url 'incidents:api_map_points' %}?{{ request.GET.urlencode }}"></div></div></div></div>
+  <div class="col-xl-5"><div class="card h-100"><div class="card-header d-flex flex-wrap justify-content-between gap-2"><div><strong>Recent operational movement</strong><div class="chart-subtitle">Daily volume and seven-day rolling average for the latest 90 reporting days.</div></div><a class="small" href="{% url 'incidents:predictive_intelligence' %}">Open trends & forecasts</a></div><div class="card-body chart-body chart-body-xl"><canvas id="decisionTrendChart"></canvas></div></div></div>
+</div>
+
+<div class="row g-4 mb-4">
+  <div class="col-xl-7"><div class="card h-100"><div class="card-header"><strong>Category momentum</strong><div class="chart-subtitle">Latest 90 reporting days compared with the preceding 90 days.</div></div><div class="table-responsive"><table class="table table-hover align-middle mb-0"><thead><tr><th>Category</th><th class="text-end">Current</th><th class="text-end">Previous</th><th class="text-end">Change</th></tr></thead><tbody>{% for row in payload.decision_support.top_momentum|slice:':6' %}<tr><td><a href="{% url 'incidents:category_profile' row.category %}">{{ row.category }}</a></td><td class="text-end">{{ row.current }}</td><td class="text-end">{{ row.previous }}</td><td class="text-end fw-bold {% if row.delta > 0 %}text-danger{% elif row.delta < 0 %}text-success{% endif %}">{% if row.delta > 0 %}+{% endif %}{{ row.delta }}</td></tr>{% empty %}<tr><td colspan="4" class="empty-state">No category momentum is available.</td></tr>{% endfor %}</tbody></table></div></div></div>
+  <div class="col-xl-5"><div class="card h-100"><div class="card-header"><strong>Unresolved incident aging</strong><div class="chart-subtitle">Age distribution relative to the latest available incident date.</div></div><div class="card-body chart-body chart-body-xl"><canvas id="agingChart"></canvas></div></div></div>
+</div>
+
+<div class="d-flex justify-content-between align-items-center mb-3"><div><h2 class="h5 fw-bold mb-1">Focused workspaces</h2><div class="small text-secondary">Open a specialist page only when deeper analysis is required.</div></div></div>
+<div class="row g-3">
+  <div class="col-md-6 col-xl"><a class="quick-link" href="{% url 'incidents:live_monitoring' %}"><div class="quick-link-icon"><i class="fa-solid fa-tower-broadcast"></i></div><div><div class="quick-link-title">Live incidents</div><div class="quick-link-text">Streaming CCTV and API events.</div></div></a></div>
+  <div class="col-md-6 col-xl"><a class="quick-link" href="{% url 'incidents:hotspot_patterns' %}"><div class="quick-link-icon"><i class="fa-solid fa-chart-column"></i></div><div><div class="quick-link-title">Hotspots & patterns</div><div class="quick-link-text">Areas, categories and time patterns.</div></div></a></div>
+  <div class="col-md-6 col-xl"><a class="quick-link" href="{% url 'incidents:operations_outcomes' %}"><div class="quick-link-icon"><i class="fa-solid fa-route"></i></div><div><div class="quick-link-title">Operations & outcomes</div><div class="quick-link-text">Command Center, dispatch and closure.</div></div></a></div>
+  <div class="col-md-6 col-xl"><a class="quick-link" href="{% url 'incidents:map_report' %}"><div class="quick-link-icon"><i class="fa-solid fa-map-location-dot"></i></div><div><div class="quick-link-title">GIS map analytics</div><div class="quick-link-text">Overall distribution, category layers and coordinate coverage.</div></div></a></div>
+  <div class="col-md-6 col-xl"><a class="quick-link" href="{% url 'incidents:data_quality' %}"><div class="quick-link-icon"><i class="fa-solid fa-shield-heart"></i></div><div><div class="quick-link-title">Data quality</div><div class="quick-link-text">Completeness, coordinates and imports.</div></div></a></div>
+</div>
+
+{{ payload|json_script:'analytics-data' }}
+{% endblock %}
+{% block scripts %}<script src="{% static 'incidents/js/analytics.js' %}?v=gis-map-report-2"></script>{% endblock %}

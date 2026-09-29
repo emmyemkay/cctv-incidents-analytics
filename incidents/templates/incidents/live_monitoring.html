@@ -1,0 +1,24 @@
+{% extends 'incidents/base.html' %}
+{% load static %}
+{% block title %}Live Monitoring · Incident Intelligence{% endblock %}
+{% block page_title %}Live CCTV Event Monitoring{% endblock %}
+{% block content %}
+<div class="page-heading">
+  <div><h1>Live CCTV and Streaming Events</h1><p>Monitor events received through the real-time ingest API and replay stream.</p></div>
+  <div class="stream-pill"><span id="streamDot" class="stream-dot"></span><span id="streamStatus">Connecting to live stream…</span></div>
+</div>
+{% include 'incidents/partials/analytics_filters.html' %}
+<div class="row g-3 mb-4">
+  <div class="col-sm-6 col-xl-3"><div class="card metric-card"><div class="card-body"><div class="metric-label">Streamed incidents</div><div class="metric-value" id="totalKpi">{{ payload.kpis.total }}</div><div class="metric-foot">Current filtered selection</div></div></div></div>
+  <div class="col-sm-6 col-xl-3"><div class="card metric-card metric-green"><div class="card-body"><div class="metric-label">Mapped events</div><div class="metric-value">{{ payload.kpis.mapped }}</div><div class="metric-foot">{{ payload.kpis.mapped_pct }}% map ready</div></div></div></div>
+  <div class="col-sm-6 col-xl-3"><div class="card metric-card metric-purple"><div class="card-body"><div class="metric-label">Leading area</div><div class="metric-text">{{ payload.kpis.top_hotspot }}</div><div class="metric-foot">{{ payload.kpis.top_hotspot_total }} streamed events</div></div></div></div>
+  <div class="col-sm-6 col-xl-3"><div class="card metric-card metric-orange"><div class="card-body"><div class="metric-label">Leading category</div><div class="metric-text">{{ payload.kpis.top_category }}</div><div class="metric-foot">{{ payload.kpis.top_category_total }} events</div></div></div></div>
+</div>
+<div class="row g-4 mb-4">
+  <div class="col-xl-8"><div class="card h-100"><div class="card-header"><strong>Live event map</strong><div class="chart-subtitle">New WebSocket events use Category, or Sub-Category only when Category is blank.</div></div><div class="card-body p-0"><div id="incidentMap"></div></div></div></div>
+  <div class="col-xl-4"><div class="card h-100"><div class="card-header"><strong>Live source mix</strong></div><div class="card-body chart-body"><canvas id="sourceChart"></canvas></div></div></div>
+</div>
+<div class="card"><div class="card-header"><strong>Latest streamed events</strong></div><div class="table-responsive"><table class="table table-hover mb-0"><thead><tr><th>Reported</th><th>Source</th><th>Event ID</th><th>Category</th><th>Area</th><th>Status</th></tr></thead><tbody id="liveIncidentRows">{% for incident in recent_incidents %}<tr data-incident-identity="id:{{ incident.pk }}"><td class="text-nowrap">{{ incident.reported_at|date:'d M Y H:i:s' }}</td><td><span class="source-badge source-{{ incident.source_type|lower }}">{{ incident.source_type }}</span></td><td>{{ incident.event_id }}</td><td>{{ incident.analytical_category|default:'—' }}</td><td>{{ incident.police_station|default:incident.incident_location|default:'—' }}</td><td>{{ incident.event_status|default:'—' }}</td></tr>{% empty %}<tr><td colspan="6" class="empty-state">No streamed events have been received yet. Use the ingest API or stream replay command.</td></tr>{% endfor %}</tbody></table></div></div>
+{{ payload|json_script:'analytics-data' }}
+{% endblock %}
+{% block scripts %}<script src="{% static 'incidents/js/analytics.js' %}?v=gis-map-report-2"></script>{% endblock %}

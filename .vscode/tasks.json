@@ -1,0 +1,31 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Development: Start core stack",
+      "type": "shell",
+      "command": "docker compose up -d --build",
+      "group": "build",
+      "problemMatcher": []
+    },
+    {
+      "label": "Development: Follow logs",
+      "type": "shell",
+      "command": "docker compose logs -f web worker",
+      "problemMatcher": []
+    },
+    {
+      "label": "Development: Run tests",
+      "type": "shell",
+      "command": "docker compose exec web pytest",
+      "group": "test",
+      "problemMatcher": []
+    },
+    {
+      "label": "Development: Full optional stack",
+      "type": "shell",
+      "command": "docker compose --profile edge --profile scheduled --profile storage --profile mail --profile db-tools --profile monitoring up -d --build",
+      "problemMatcher": []
+    }
+  ]
+}
